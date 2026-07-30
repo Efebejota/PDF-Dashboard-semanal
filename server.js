@@ -54,7 +54,9 @@ async function clickByText(page, text) {
  *   loadingTexts?: string[],        // textos que indican "aún cargando" (opcional, hay valor por defecto)
  *   waitMs?: number,                // espera extra tras cada click de pestaña, en ms (opcional)
  *   refreshButtonText?: string,     // texto exacto del botón de refresco a pulsar antes de capturar (opcional)
- *   refreshTimeoutMs?: number       // cuánto esperar como máximo tras pulsar refrescar (opcional, por defecto 45s)
+ *   refreshTimeoutMs?: number,      // cuánto esperar como máximo tras pulsar refrescar (opcional, por defecto 45s)
+ *   initialTimeoutMs?: number,      // cuánto esperar como máximo la carga inicial de la página (opcional, por defecto 60s)
+ *   tabTimeoutMs?: number           // cuánto esperar como máximo tras cada click de pestaña (opcional, por defecto 30s)
  * }
  * respuesta: { pdfBase64: string }  // PDF combinado (todas las pestañas en un único PDF), en base64
  *
@@ -70,6 +72,8 @@ app.post('/render', checkAuth, async (req, res) => {
     waitMs = 1500,
     refreshButtonText = null,
     refreshTimeoutMs = 45000,
+    initialTimeoutMs = 60000,
+    tabTimeoutMs = 30000,
   } = req.body;
 
   if (!url) return res.status(400).json({ error: 'Falta "url"' });
@@ -84,7 +88,7 @@ app.post('/render', checkAuth, async (req, res) => {
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    await waitUntilLoaded(page, loadingTexts);
+    await waitUntilLoaded(page, loadingTexts, initialTimeoutMs);
 
     if (refreshButtonText) {
       await clickByText(page, refreshButtonText);
@@ -100,7 +104,7 @@ app.post('/render', checkAuth, async (req, res) => {
       if (tabLabel) {
         await clickByText(page, tabLabel);
         await new Promise((r) => setTimeout(r, waitMs));
-        await waitUntilLoaded(page, loadingTexts);
+        await waitUntilLoaded(page, loadingTexts, tabTimeoutMs);
       }
       const buffer = await page.pdf({ format: 'A4', printBackground: true });
       const doc = await PDFDocument.load(buffer);
