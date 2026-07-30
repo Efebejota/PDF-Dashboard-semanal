@@ -29,8 +29,9 @@ async function waitUntilLoaded(page, loadingTexts, timeoutMs = 20000) {
   );
 }
 
-// Busca un elemento clicable cuyo texto coincida exactamente y le hace click
-async function clickTabByText(page, text) {
+// Busca un elemento clicable cuyo texto coincida exactamente y le hace click.
+// Se usa tanto para las pestañas/períodos como para el botón de refresco.
+async function clickByText(page, text) {
   const clicked = await page.evaluate((label) => {
     const candidates = Array.from(document.querySelectorAll('button, a, div, span, li'));
     const el = candidates.find((e) => e.textContent && e.textContent.trim() === label);
@@ -41,19 +42,25 @@ async function clickTabByText(page, text) {
     return false;
   }, text);
   if (!clicked) {
-    throw new Error(`No se encontró la pestaña con texto "${text}"`);
+    throw new Error(`No se encontró el elemento con texto "${text}"`);
   }
 }
 
 /**
  * POST /render
  * body: {
- *   url: string,                 // URL del dashboard
- *   tabs?: string[],             // textos exactos de las pestañas a recorrer, en orden (opcional)
- *   loadingTexts?: string[],     // textos que indican "aún cargando" (opcional, hay un valor por defecto)
- *   waitMs?: number              // espera extra tras cada click de pestaña, en ms (opcional)
+ *   url: string,                   // URL del dashboard
+ *   tabs?: string[],                // textos exactos de las pestañas/períodos a recorrer, en orden (opcional)
+ *   loadingTexts?: string[],        // textos que indican "aún cargando" (opcional, hay valor por defecto)
+ *   waitMs?: number,                // espera extra tras cada click de pestaña, en ms (opcional)
+ *   refreshButtonText?: string,     // texto exacto del botón de refresco a pulsar antes de capturar (opcional)
+ *   refreshTimeoutMs?: number       // cuánto esperar como máximo tras pulsar refrescar (opcional, por defecto 45s)
  * }
  * respuesta: { pdfBase64: string }  // PDF combinado (todas las pestañas en un único PDF), en base64
+ *
+ * IMPORTANTE: refreshButtonText debe ser SIEMPRE un botón de refresco rápido/incremental
+ * (segundos), nunca uno que dispare una recarga completa (algunos dashboards tienen un
+ * endpoint /api/reload de 15+ minutos aparte del incremental /api/refresh - no confundirlos).
  */
 app.post('/render', checkAuth, async (req, res) => {
   const {
@@ -61,6 +68,8 @@ app.post('/render', checkAuth, async (req, res) => {
     tabs,
     loadingTexts = ['Conectando con el servidor...', 'Cargando datos...'],
     waitMs = 1500,
+    refreshButtonText = null,
+    refreshTimeoutMs = 45000,
   } = req.body;
 
   if (!url) return res.status(400).json({ error: 'Falta "url"' });
@@ -77,12 +86,19 @@ app.post('/render', checkAuth, async (req, res) => {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     await waitUntilLoaded(page, loadingTexts);
 
+    if (refreshButtonText) {
+      await clickByText(page, refreshButtonText);
+      // pequeña pausa para dejar que el estado de "cargando" arranque antes de comprobarlo
+      await new Promise((r) => setTimeout(r, 300));
+      await waitUntilLoaded(page, loadingTexts, refreshTimeoutMs);
+    }
+
     const merged = await PDFDocument.create();
     const tabList = Array.isArray(tabs) && tabs.length ? tabs : [null];
 
     for (const tabLabel of tabList) {
       if (tabLabel) {
-        await clickTabByText(page, tabLabel);
+        await clickByText(page, tabLabel);
         await new Promise((r) => setTimeout(r, waitMs));
         await waitUntilLoaded(page, loadingTexts);
       }
