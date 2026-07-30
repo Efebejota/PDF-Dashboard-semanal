@@ -72,8 +72,8 @@ app.post('/render', checkAuth, async (req, res) => {
     waitMs = 1500,
     refreshButtonText = null,
     refreshTimeoutMs = 120000,
-    initialTimeoutMs = 60000,
-    tabTimeoutMs = 30000,
+    initialTimeoutMs = 120000,
+    tabTimeoutMs = 45000,
   } = req.body;
 
   if (!url) return res.status(400).json({ error: 'Falta "url"' });
