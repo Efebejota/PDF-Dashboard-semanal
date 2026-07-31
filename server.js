@@ -64,7 +64,21 @@ async function clickByText(page, text) {
  * (segundos), nunca uno que dispare una recarga completa (algunos dashboards tienen un
  * endpoint /api/reload de 15+ minutos aparte del incremental /api/refresh - no confundirlos).
  */
+let busy = false;
+
 app.post('/render', checkAuth, async (req, res) => {
+  if (busy) {
+    return res.status(429).json({ error: 'Ya hay un renderizado en curso, espera a que termine y reintenta' });
+  }
+  busy = true;
+  try {
+    await handleRender(req, res);
+  } finally {
+    busy = false;
+  }
+});
+
+async function handleRender(req, res) {
   const {
     url,
     tabs,
@@ -120,7 +134,7 @@ app.post('/render', checkAuth, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-});
+}
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
